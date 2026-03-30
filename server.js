@@ -322,6 +322,7 @@ const server = createServer(async (req, res) => {
       "--output-format", "stream-json",
       "--model", model || "sonnet",
       "--verbose",
+      "--dangerously-skip-permissions",
     ];
 
     if (sessionId) {
