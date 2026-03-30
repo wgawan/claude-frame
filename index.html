@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claude Frame</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0a;
+      --surface: #141414;
+      --border: #262626;
+      --border-active: #3b82f6;
+      --text: #ededed;
+      --text-dim: #888;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --red: #ef4444;
+      --green: #22c55e;
+      --mono: 'Geist Mono', 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --sans: 'Geist Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Login overlay ── */
+    .login-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+
+    .hidden { display: none !important; }
+    .login-overlay.hidden { display: none; }
+
+    .login-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      width: 340px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .login-box h2 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      text-align: center;
+    }
+
+    .login-box input[type="password"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+
+    .login-box input[type="password"]:focus {
+      border-color: var(--accent);
+    }
+
+    .login-error {
+      color: var(--red);
+      font-size: 12px;
+      text-align: center;
+      min-height: 16px;
+    }
+
+    /* ── Header ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    header h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.02em; }
+
+    header .status {
+      font-size: 11px;
+      font-family: var(--mono);
+      color: var(--text-dim);
+      margin-left: auto;
+    }
+    header .status.running { color: var(--accent); }
+    header .status.done { color: var(--green); }
+    header .status.error { color: var(--red); }
+
+    /* ── Split layout ── */
+    .workspace {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Left panel: chat ── */
+    .panel-chat {
+      width: 33.333%;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border);
+    }
+
+    .panel-chat.full-width {
+      width: 100%;
+      border-right: none;
+    }
+
+    .chat-controls {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+    }
+
+    textarea, input[type="text"], select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 13px;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus, input[type="text"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+
+    textarea {
+      resize: none;
+      min-height: 72px;
+      flex-shrink: 0;
+    }
+
+    input[type="text"] { flex: 1; min-width: 0; }
+    select { min-width: 90px; }
+
+    .actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    button {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+    .btn-danger { background: transparent; border-color: var(--red); color: var(--red); }
+    .btn-danger:hover:not(:disabled) { background: var(--red); color: white; }
+
+    .btn-secondary { background: transparent; border-color: var(--border); color: var(--text-dim); }
+    .btn-secondary:hover:not(:disabled) { border-color: var(--text-dim); color: var(--text); }
+
+    /* ── Output area ── */
+    #output {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #output:empty::before {
+      content: 'Output will appear here...';
+      color: var(--text-dim);
+    }
+
+    .chunk-user { color: var(--accent); font-weight: 500; margin-bottom: 4px; display: inline-block; }
+
+    .thinking-indicator {
+      color: var(--text-dim);
+      font-style: italic;
+    }
+    .thinking-indicator::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0% { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+    .chunk-assistant { color: var(--text); }
+    .chunk-system { color: var(--text-dim); font-style: italic; }
+    .chunk-tool { color: #f59e0b; }
+    .chunk-tool-output { color: var(--text-dim); padding-left: 16px; }
+    .chunk-error { color: var(--red); }
+    .chunk-result { color: var(--green); }
+    .chunk-cost { color: #22d3ee; }
+
+    /* ── Right panel: preview ── */
+    .panel-preview {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+    }
+
+    .panel-preview.hidden { display: none; }
+
+    .preview-toolbar {
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .preview-toolbar .url-bar {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text-dim);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 4px 8px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .preview-toolbar .url-bar:focus {
+      border-color: var(--accent);
+      color: var(--text);
+    }
+
+    .viewport-btns {
+      display: flex;
+      gap: 2px;
+    }
+
+    .viewport-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px 10px;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .viewport-btn:hover {
+      border-color: var(--text-dim);
+      color: var(--text);
+    }
+
+    .viewport-btn.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(59, 130, 246, 0.1);
+    }
+
+    .preview-container {
+      flex: 1;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 0;
+      overflow: hidden;
+      background: #1a1a1a;
+    }
+
+    .iframe-wrapper {
+      background: white;
+      transition: width 0.25s ease, height 0.25s ease;
+      height: 100%;
+      position: relative;
+    }
+
+    .iframe-wrapper.desktop { width: 100%; }
+
+    .iframe-wrapper.tablet {
+      width: 768px;
+      max-width: 100%;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .iframe-wrapper.mobile {
+      width: 375px;
+      max-width: 100%;
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+    }
+
+    .iframe-wrapper iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+
+    .refresh-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      padding: 4px 8px;
+      font-size: 13px;
+      border-radius: 4px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .refresh-btn:hover { border-color: var(--text-dim); color: var(--text); }
+
+    /* ── Branch ── */
+    .branch-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(34, 197, 94, 0.1);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--green);
+    }
+
+    .branch-tag.protected {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: var(--red);
+    }
+
+    .branch-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 90;
+    }
+    .branch-overlay.hidden { display: none; }
+
+    .branch-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 32px;
+      width: 380px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .branch-box h2 { font-size: 16px; font-weight: 600; text-align: center; }
+    .branch-box p { font-size: 13px; color: var(--text-dim); text-align: center; }
+    .branch-box input[type="text"] {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 14px;
+      padding: 10px 12px;
+      outline: none;
+      width: 100%;
+    }
+    .branch-box input[type="text"]:focus { border-color: var(--accent); }
+    .branch-error { color: var(--red); font-size: 12px; text-align: center; min-height: 16px; }
+
+    .btn-commit {
+      background: transparent;
+      border: 1px solid var(--green);
+      color: var(--green);
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+    .btn-commit:hover:not(:disabled) { background: var(--green); color: var(--bg); }
+  </style>
+</head>
+<body>
+  <!-- Login overlay -->
+  <div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+      <h2>Claude Frame</h2>
+      <input type="password" id="loginPassword" placeholder="Password" autofocus />
+      <div class="login-error" id="loginError"></div>
+      <button class="btn-primary" style="width:100%; padding:10px;" onclick="doLogin()">Sign In</button>
+    </div>
+  </div>
+
+  <!-- Branch creation overlay -->
+  <div class="branch-overlay hidden" id="branchOverlay">
+    <div class="branch-box">
+      <h2>Create a Branch</h2>
+      <p>You're on a protected branch. Create a new branch to get started.</p>
+      <input type="text" id="branchNameInput" placeholder="my-feature-branch" />
+      <div class="branch-error" id="branchError"></div>
+      <button class="btn-primary" style="width:100%; padding:10px;" onclick="createBranch()">Create Branch</button>
+    </div>
+  </div>
+
+  <header>
+    <h1>Claude Frame</h1>
+    <span class="branch-tag" id="branchTag">...</span>
+    <button class="btn-commit hidden" id="commitBtn" onclick="commitBranch()">Commit &amp; Push</button>
+    <span id="statusLabel" class="status">idle</span>
+  </header>
+
+  <div class="workspace">
+    <!-- Left: Chat panel -->
+    <div class="panel-chat" id="panelChat">
+      <div id="output"></div>
+      <div class="chat-controls">
+        <div style="display:flex; gap:6px; align-items:flex-end;">
+          <textarea id="prompt" placeholder="Enter your prompt... (Ctrl+Enter to run)" style="flex:1;"></textarea>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <button id="runBtn" class="btn-primary" onclick="startRun()">Run</button>
+            <button id="stopBtn" class="btn-danger" onclick="stopRun()" disabled>Stop</button>
+            <button class="btn-secondary" onclick="clearOutput()">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Preview panel -->
+    <div class="panel-preview hidden" id="panelPreview">
+      <div class="preview-toolbar">
+        <input type="text" class="url-bar" id="urlBar" placeholder="URL" />
+        <button class="refresh-btn" onclick="refreshIframe()" title="Refresh">&#x21bb;</button>
+        <div class="viewport-btns">
+          <button class="viewport-btn" data-viewport="mobile" onclick="setViewport('mobile')">Mobile</button>
+          <button class="viewport-btn" data-viewport="tablet" onclick="setViewport('tablet')">Tablet</button>
+          <button class="viewport-btn active" data-viewport="desktop" onclick="setViewport('desktop')">Desktop</button>
+        </div>
+      </div>
+      <div class="preview-container">
+        <div class="iframe-wrapper desktop" id="iframeWrapper">
+          <iframe id="previewFrame" src="about:blank"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentRunId = null;
+    let eventSource = null;
+    let iframeUrl = '';
+    let authToken = sessionStorage.getItem('rc_token') || '';
+    let currentSessionId = null;
+
+    const output = document.getElementById('output');
+    const statusLabel = document.getElementById('statusLabel');
+    const runBtn = document.getElementById('runBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const panelChat = document.getElementById('panelChat');
+    const panelPreview = document.getElementById('panelPreview');
+    const previewFrame = document.getElementById('previewFrame');
+    const urlDisplay = document.getElementById('urlDisplay');
+    const iframeWrapper = document.getElementById('iframeWrapper');
+    const loginOverlay = document.getElementById('loginOverlay');
+    const branchOverlay = document.getElementById('branchOverlay');
+    const branchTag = document.getElementById('branchTag');
+    const commitBtn = document.getElementById('commitBtn');
+    const urlBar = document.getElementById('urlBar');
+
+    const PROTECTED_BRANCHES = ['main', 'master', 'development', 'develop'];
+    let currentBranch = '';
+
+    // Auth helpers
+    function authHeaders() {
+      return { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
+    }
+
+    async function doLogin() {
+      const pw = document.getElementById('loginPassword').value;
+      const errEl = document.getElementById('loginError');
+      errEl.textContent = '';
+
+      try {
+        const res = await fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw }),
+        });
+        if (res.ok) {
+          authToken = pw;
+          sessionStorage.setItem('rc_token', pw);
+          loginOverlay.classList.add('hidden');
+          loadConfig();
+          document.getElementById('prompt').focus();
+        } else {
+          errEl.textContent = 'Wrong password';
+          document.getElementById('loginPassword').select();
+        }
+      } catch {
+        errEl.textContent = 'Connection failed';
+      }
+    }
+
+    // Enter to submit login
+    document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') doLogin();
+    });
+
+    // Check if stored token is still valid
+    async function checkAuth() {
+      if (!authToken) return false;
+      try {
+        const res = await fetch('/api/config', { headers: authHeaders() });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    // Init
+    (async () => {
+      if (await checkAuth()) {
+        loginOverlay.classList.add('hidden');
+        loadConfig();
+      } else {
+        authToken = '';
+        sessionStorage.removeItem('rc_token');
+        loginOverlay.classList.remove('hidden');
+      }
+    })();
+
+    // Track the current URL the user is viewing in the iframe
+    let currentViewUrl = '';
+    let originalOrigin = ''; // The real site origin (e.g. https://kapil.wally.dev)
+    let isProxied = false;
+
+    const PREVIEW_PREFIX = '/__preview__';
+
+    // Convert a proxied URL to the real URL.
+    // Handles both /__preview__/path and /path (after SPA pushState)
+    function proxyToReal(url) {
+      if (!isProxied || !originalOrigin) return url;
+      try {
+        const u = new URL(url, location.origin);
+        if (u.origin === location.origin) {
+          const path = u.pathname.startsWith(PREVIEW_PREFIX)
+            ? u.pathname.slice(PREVIEW_PREFIX.length) || '/'
+            : u.pathname;
+          return originalOrigin + path + u.search + u.hash;
+        }
+      } catch {}
+      return url;
+    }
+
+    // Convert a real URL to a preview URL for the iframe
+    function realToProxy(url) {
+      if (!isProxied || !originalOrigin) return url;
+      try {
+        const u = new URL(url);
+        if (u.origin === new URL(originalOrigin).origin) {
+          return PREVIEW_PREFIX + u.pathname + u.search + u.hash;
+        }
+      } catch {}
+      return url;
+    }
+
+    function updateViewUrl(url) {
+      const realUrl = proxyToReal(url);
+      currentViewUrl = realUrl;
+      urlBar.value = realUrl;
+    }
+
+    // Track visible modal content from the iframe
+    let currentModalContent = null;
+
+    // Listen for bridge script postMessage (injected by proxy into HTML).
+    // Only accept messages from same origin (the proxied iframe is same-origin).
+    window.addEventListener('message', (e) => {
+      if (e.origin !== location.origin) return;
+      if (e.data?.type === 'rc-url-change' && typeof e.data.url === 'string') {
+        updateViewUrl(e.data.url);
+      }
+      if (e.data?.type === 'rc-modal-change') {
+        currentModalContent = e.data.modal || null;
+      }
+    });
+
+    // Fallback: read same-origin iframe URL on load + poll
+    previewFrame.addEventListener('load', () => {
+      try {
+        const loc = previewFrame.contentWindow?.location?.href;
+        if (loc && loc !== 'about:blank') {
+          updateViewUrl(loc);
+        }
+      } catch { /* cross-origin */ }
+    });
+
+    setInterval(() => {
+      try {
+        const loc = previewFrame.contentWindow?.location?.href;
+        if (loc && loc !== 'about:blank' && proxyToReal(loc) !== currentViewUrl) {
+          updateViewUrl(loc);
+        }
+      } catch { /* cross-origin */ }
+    }, 500);
+
+    // Let user navigate by editing the URL bar
+    urlBar.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const url = urlBar.value.trim();
+        if (url) {
+          currentViewUrl = url;
+          previewFrame.src = realToProxy(url);
+        }
+      }
+    });
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config', { headers: authHeaders() });
+        const config = await res.json();
+        iframeUrl = config.iframeUrl || '';
+        originalOrigin = config.originalUrl || '';
+        isProxied = iframeUrl.startsWith('/__preview__');
+
+        if (iframeUrl) {
+          panelPreview.classList.remove('hidden');
+          panelChat.classList.remove('full-width');
+          // Show the real URL in the bar, not the proxy URL
+          updateViewUrl(originalOrigin || iframeUrl);
+          previewFrame.src = iframeUrl;
+        } else {
+          panelPreview.classList.add('hidden');
+          panelChat.classList.add('full-width');
+        }
+      } catch {
+        panelPreview.classList.add('hidden');
+        panelChat.classList.add('full-width');
+      }
+      await loadBranch();
+    }
+
+    async function loadBranch() {
+      try {
+        const res = await fetch('/api/branch', { headers: authHeaders() });
+        const { branch } = await res.json();
+        currentBranch = branch;
+        branchTag.textContent = branch;
+
+        if (PROTECTED_BRANCHES.includes(branch)) {
+          branchTag.classList.add('protected');
+          commitBtn.classList.add('hidden');
+          branchOverlay.classList.remove('hidden');
+          document.getElementById('branchNameInput').focus();
+        } else {
+          branchTag.classList.remove('protected');
+          commitBtn.classList.remove('hidden');
+          branchOverlay.classList.add('hidden');
+        }
+      } catch {
+        branchTag.textContent = '?';
+      }
+    }
+
+    async function createBranch() {
+      const name = document.getElementById('branchNameInput').value.trim();
+      const errEl = document.getElementById('branchError');
+      errEl.textContent = '';
+      if (!name) { errEl.textContent = 'Enter a branch name'; return; }
+      if (PROTECTED_BRANCHES.includes(name)) { errEl.textContent = 'Cannot use a protected branch name'; return; }
+
+      try {
+        const res = await fetch('/api/branch', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ name }),
+        });
+        const data = await res.json();
+        if (data.error) { errEl.textContent = data.error; return; }
+        await loadBranch();
+        document.getElementById('prompt').focus();
+      } catch (err) {
+        errEl.textContent = 'Failed to create branch';
+      }
+    }
+
+    // Enter to create branch
+    document.getElementById('branchNameInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') createBranch();
+    });
+
+    async function commitBranch() {
+      if (PROTECTED_BRANCHES.includes(currentBranch)) return;
+      const message = prompt('Commit message (optional):') ?? '';
+      commitBtn.disabled = true;
+      commitBtn.textContent = 'Pushing...';
+      try {
+        const res = await fetch('/api/commit', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ message: message || undefined }),
+        });
+        const data = await res.json();
+        if (data.error) {
+          alert(`Commit failed: ${data.error}`);
+        } else {
+          alert(`Pushed to ${data.branch}`);
+        }
+      } catch {
+        alert('Commit failed');
+      }
+      commitBtn.disabled = false;
+      commitBtn.textContent = 'Commit & Push';
+    }
+
+    function setViewport(size) {
+      iframeWrapper.className = `iframe-wrapper ${size}`;
+      document.querySelectorAll('.viewport-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.viewport === size);
+      });
+    }
+
+    function refreshIframe() {
+      if (currentViewUrl) {
+        previewFrame.src = currentViewUrl;
+      }
+    }
+
+    function setStatus(text, cls) {
+      statusLabel.textContent = text;
+      statusLabel.className = `status ${cls || ''}`;
+    }
+
+    function appendOutput(text, cls) {
+      const span = document.createElement('span');
+      span.className = cls || '';
+      span.textContent = text;
+      output.appendChild(span);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function clearOutput() {
+      output.innerHTML = '';
+      currentSessionId = null;
+    }
+
+    function showThinking() {
+      hideThinking();
+      const el = document.createElement('span');
+      el.className = 'thinking-indicator';
+      el.id = 'thinkingIndicator';
+      el.textContent = 'Claude is thinking';
+      output.appendChild(el);
+      output.scrollTop = output.scrollHeight;
+    }
+
+    function hideThinking() {
+      const el = document.getElementById('thinkingIndicator');
+      if (el) el.remove();
+    }
+
+    async function startRun() {
+      if (PROTECTED_BRANCHES.includes(currentBranch)) {
+        branchOverlay.classList.remove('hidden');
+        return;
+      }
+      const promptEl = document.getElementById('prompt');
+      const prompt = promptEl.value.trim();
+      if (!prompt) return;
+
+      appendOutput(`> ${prompt}\n\n`, 'chunk-user');
+      showThinking();
+      promptEl.value = '';
+      runBtn.disabled = true;
+      stopBtn.disabled = false;
+      setStatus('starting...', 'running');
+
+      try {
+        const res = await fetch('/api/run', {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({
+            prompt,
+            model: 'sonnet',
+            sessionId: currentSessionId,
+            viewUrl: currentViewUrl || undefined,
+            modalContent: currentModalContent || undefined,
+          }),
+        });
+
+        if (res.status === 401) {
+          authToken = '';
+          sessionStorage.removeItem('rc_token');
+          loginOverlay.classList.remove('hidden');
+          runBtn.disabled = false;
+          stopBtn.disabled = true;
+          return;
+        }
+
+        const { runId, error } = await res.json();
+        if (error) {
+          appendOutput(`Error: ${error}\n`, 'chunk-error');
+          setStatus('error', 'error');
+          runBtn.disabled = false;
+          stopBtn.disabled = true;
+          return;
+        }
+
+        currentRunId = runId;
+        setStatus('running', 'running');
+        connectSSE(runId);
+      } catch (err) {
+        appendOutput(`Connection error: ${err.message}\n`, 'chunk-error');
+        setStatus('error', 'error');
+        runBtn.disabled = false;
+        stopBtn.disabled = true;
+      }
+    }
+
+    function connectSSE(runId) {
+      // EventSource doesn't support headers, so pass token as query param
+      eventSource = new EventSource(`/api/stream/${runId}?token=${encodeURIComponent(authToken)}`);
+
+      eventSource.addEventListener('output', (e) => {
+        const item = JSON.parse(e.data);
+        if (item.type === 'stderr') {
+          // Suppress stderr — mostly noisy hook/system output
+          return;
+        }
+
+        const lines = item.data.split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const msg = JSON.parse(line);
+            renderStreamMessage(msg);
+          } catch {
+            // Skip non-JSON lines (usually partial/malformed events)
+          }
+        }
+      });
+
+      eventSource.addEventListener('done', (e) => {
+        const { exitCode, sessionId } = JSON.parse(e.data);
+        if (sessionId) currentSessionId = sessionId;
+        eventSource.close();
+        eventSource = null;
+        currentRunId = null;
+        hideThinking();
+
+        const cls = exitCode === 0 ? 'done' : 'error';
+        setStatus(`exit ${exitCode}`, cls);
+        if (exitCode !== 0) {
+          appendOutput(`\n--- error (exit ${exitCode}) ---\n`, 'chunk-error');
+        }
+        runBtn.disabled = false;
+        stopBtn.disabled = true;
+      });
+
+      eventSource.onerror = () => {
+        eventSource.close();
+        eventSource = null;
+        setStatus('disconnected', 'error');
+        runBtn.disabled = false;
+        stopBtn.disabled = true;
+      };
+    }
+
+    function formatToolSummary(name, input) {
+      if (!input) return '';
+      switch (name) {
+        case 'Read': return input.file_path || '';
+        case 'Write': return input.file_path || '';
+        case 'Edit': return input.file_path || '';
+        case 'Bash': return (input.command || '').slice(0, 120);
+        case 'Glob': return input.pattern || '';
+        case 'Grep': return `/${input.pattern || ''}/ ${input.path || ''}`;
+        case 'Agent': return input.description || '';
+        default: {
+          const keys = Object.keys(input);
+          return keys.slice(0, 3).join(', ');
+        }
+      }
+    }
+
+    function renderToolResult(content, isError) {
+      if (isError) {
+        const text = typeof content === 'string' ? content : JSON.stringify(content);
+        appendOutput(`  [error] ${text.slice(0, 200)}\n`, 'chunk-error');
+        return;
+      }
+      if (typeof content === 'string') {
+        const lines = content.split('\n');
+        const preview = lines.slice(0, 5);
+        for (const l of preview) {
+          appendOutput(`  ${l}\n`, 'chunk-tool-output');
+        }
+        if (lines.length > 5) {
+          appendOutput(`  ... (${lines.length - 5} more lines)\n`, 'chunk-tool-output');
+        }
+      }
+    }
+
+    function renderStreamMessage(msg) {
+      if (msg.type === 'assistant' || msg.type === 'user' || msg.type === 'result') {
+        hideThinking();
+      }
+      switch (msg.type) {
+        case 'assistant':
+          if (!msg.message?.content) break;
+          for (const block of msg.message.content) {
+            if (block.type === 'text' && block.text) {
+              appendOutput(block.text, 'chunk-assistant');
+            } else if (block.type === 'tool_use') {
+              const summary = formatToolSummary(block.name, block.input);
+              appendOutput(`[${block.name}]`, 'chunk-tool');
+              if (summary) appendOutput(` ${summary}`, 'chunk-assistant');
+              appendOutput('\n', '');
+            } else if (block.type === 'tool_result') {
+              renderToolResult(block.content, block.is_error);
+            }
+          }
+          break;
+
+        case 'user':
+          if (!msg.message?.content || !Array.isArray(msg.message.content)) break;
+          for (const block of msg.message.content) {
+            if (block.type === 'tool_result') {
+              renderToolResult(
+                typeof block.content === 'string' ? block.content : JSON.stringify(block.content),
+                block.is_error
+              );
+            }
+          }
+          break;
+
+        case 'result': {
+          const parts = [];
+          if (msg.cost_usd !== undefined) parts.push(`cost: $${msg.cost_usd.toFixed(4)}`);
+          if (msg.duration_ms !== undefined) parts.push(`total: ${(msg.duration_ms / 1000).toFixed(1)}s`);
+          if (msg.duration_api_ms !== undefined) parts.push(`api: ${(msg.duration_api_ms / 1000).toFixed(1)}s`);
+          if (parts.length > 0) {
+            appendOutput(`[result] ${parts.join(' | ')}\n`, 'chunk-cost');
+          }
+          break;
+        }
+
+        case 'system': {
+          const sub = msg.subtype || '';
+          // Skip noisy hook lifecycle events
+          if (sub.startsWith('hook_')) break;
+          if (msg.message) {
+            appendOutput(`${msg.message}\n`, 'chunk-system');
+          }
+          break;
+        }
+
+        default:
+          break;
+      }
+    }
+
+    async function stopRun() {
+      if (!currentRunId) return;
+      try {
+        await fetch(`/api/stop/${currentRunId}`, { method: 'POST', headers: authHeaders() });
+      } catch { /* ignore */ }
+      stopBtn.disabled = true;
+    }
+
+    document.getElementById('prompt').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (!runBtn.disabled) startRun();
+      }
+    });
+  </script>
+</body>
+</html>
